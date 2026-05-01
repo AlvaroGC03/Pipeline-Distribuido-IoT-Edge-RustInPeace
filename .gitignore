@@ -1,0 +1,16 @@
+# Rust build artifacts
+rust/target/
+
+# Variables de entorno con credenciales
+.env
+
+# Llaves y certificados
+*.key
+*.pem
+*.p12
+
+# Configuración real de WireGuard (solo versiones sanitizadas en /vpn/)
+wg0.conf
+
+# Binarios sueltos
+*.exe

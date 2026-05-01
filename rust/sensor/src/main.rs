@@ -37,7 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 // ── LOOP INTERIOR (Envío de Datos) ─────────────────────────
                 loop {
-                    let raw_temp = normal.sample(&mut rng);
+                    let raw_temp: f64 = normal.sample(&mut rng);
                     let temperature = raw_temp.clamp(10.0, 50.0);
                     
                     let reading = SensorReading {

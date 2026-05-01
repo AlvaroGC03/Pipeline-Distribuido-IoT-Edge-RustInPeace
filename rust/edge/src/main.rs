@@ -1,4 +1,3 @@
-use bytes::Bytes;
 use shared::{EdgeReport, Heartbeat, Message, SensorReading};
 use std::collections::VecDeque;
 use std::env;

@@ -27,6 +27,8 @@ pub struct CoordStatus {
     pub anomalies_last_min: u32,
     pub uptime_s: u64,
     pub throughput_msg_per_s: f64,
+    pub latency_p50_ms: f64,
+    pub latency_p99_ms: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
