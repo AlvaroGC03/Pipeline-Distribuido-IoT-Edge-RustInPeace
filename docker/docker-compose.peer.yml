@@ -1,0 +1,31 @@
+version: "3.9"
+
+networks:
+  iot_net:
+    driver: bridge
+
+services:
+
+  edge:
+    image: pipeline-edge:dev
+    container_name: edge
+    networks:
+      - iot_net
+    environment:
+      - EDGE_ID=edge-${PEER_ID:-01}
+      - LISTEN_PORT=9000
+      - COORDINATOR_ADDR=${COORDINATOR_ADDR:-10.10.10.1:9100}
+      - THRESHOLD=35.0
+      - HEARTBEAT_INTERVAL_MS=3000
+    restart: unless-stopped
+
+  sensor:
+    image: pipeline-sensor:dev
+    networks:
+      - iot_net
+    environment:
+      - SENSOR_ID=sensor-${HOSTNAME}
+      - EDGE_ADDR=edge:9000
+    depends_on:
+      - edge
+    restart: unless-stopped
