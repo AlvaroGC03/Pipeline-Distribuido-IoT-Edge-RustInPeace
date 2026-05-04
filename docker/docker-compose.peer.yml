@@ -1,5 +1,3 @@
-version: "3.9"
-
 networks:
   iot_net:
     driver: bridge
@@ -24,7 +22,7 @@ services:
     networks:
       - iot_net
     environment:
-      - SENSOR_ID=sensor-${HOSTNAME}
+      - SENSOR_ID=sensor-${PEER_ID:-01}-${SERVICE_INDEX:-1}
       - EDGE_ADDR=edge:9000
     depends_on:
       - edge
