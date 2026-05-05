@@ -1,0 +1,41 @@
+[Interface]
+# IP VPN del hub dentro del túnel
+Address = 10.10.10.1/24
+
+# Puerto UDP donde escucha WireGuard
+ListenPort = 51820
+
+# Llave privada del hub
+PrivateKey = ${HUB_PRIVATE}
+
+PostUp   = sysctl -w net.ipv4.ip_forward=1; iptables -A FORWARD -i wg0 -j ACCEPT; iptables -A FORWARD -o wg0 -j ACCEPT; iptables -t nat -A POSTROUTING -o ens5 -j MASQUERADE
+PostDown = sysctl -w net.ipv4.ip_forward=0; iptables -D FORWARD -i wg0 -j ACCEPT; iptables -D FORWARD -o wg0 -j ACCEPT; iptables -t nat -D POSTROUTING -o ens5 -j MASQUERADE
+
+
+# ─────────────────────────────────────────────
+# PEER 1
+# ─────────────────────────────────────────────
+[Peer]
+PublicKey = <PEER1_PUBLIC_KEY>
+AllowedIPs = 10.10.10.2/32
+
+# ─────────────────────────────────────────────
+# PEER 2
+# ─────────────────────────────────────────────
+[Peer]
+PublicKey = <PEER2_PUBLIC_KEY>
+AllowedIPs = 10.10.10.3/32
+
+# ─────────────────────────────────────────────
+# PEER 3
+# ─────────────────────────────────────────────
+[Peer]
+PublicKey = <PEER3_PUBLIC_KEY>
+AllowedIPs = 10.10.10.4/32
+
+# ─────────────────────────────────────────────
+# PEER 4
+# ─────────────────────────────────────────────
+[Peer]
+PublicKey = <PEER4_PUBLIC_KEY>
+AllowedIPs = 10.10.10.5/32
