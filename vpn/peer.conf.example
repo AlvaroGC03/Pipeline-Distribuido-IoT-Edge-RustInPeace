@@ -1,0 +1,30 @@
+[Interface]
+# IP VPN de este peer dentro del túnel
+Address = <PEER_VPN_IP>/24
+
+# MTU reducido por la encapsulación WireGuard.1420 es el default de WireGuard; funciona bien con eth1 MTU 1472
+MTU = 1420
+
+# Llave privada de este peer
+PrivateKey = ${PEER_PRIVATE}
+
+# DNS opcional — usar el del sistema si no se necesita resolución dentro del túnel
+# DNS = 1.1.1.1
+
+# ─────────────────────────────────────────────
+# HUB (único peer conocido en topología spoke)
+# ─────────────────────────────────────────────
+[Peer]
+# Llave pública del hub EC2
+PublicKey = <HUB_PUBLIC_KEY>
+
+# Endpoint público del hub — IP Elástica de EC2 + puerto WireGuard
+Endpoint = <HUB_PUBLIC_IP>:51820
+
+# Enrutar solo el tráfico VPN (10.10.10.0/24) por el túnel
+# NO usar 0.0.0.0/0 (eso redirige TODO el tráfico por el túnel)
+AllowedIPs = 10.10.10.0/24
+
+# Mantener el túnel activo a través de NAT/CGNAT
+# Envía un paquete keepalive cada 25 segundos
+PersistentKeepalive = 25
