@@ -14,7 +14,7 @@ use tracing::{error, info, warn};
 // Tiempo máximo sin heartbeat antes de marcar un edge como caído
 const HEARTBEAT_TIMEOUT_MS: u64 = 10_000;
 // Intervalo de revisión del detector de caídas
-const WATCHDOG_INTERVAL_MS: u64 = 2_000;
+const WATCHDOG_INTERVAL_MS: u64 = 1_000;
 // Ventana de tiempo para métricas de latencia y anomalías
 const METRICS_WINDOW_MS: u64 = 60_000;
 // Capacidad del canal de mensajes entrantes
