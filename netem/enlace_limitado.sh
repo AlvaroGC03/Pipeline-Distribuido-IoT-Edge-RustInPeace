@@ -1,19 +1,20 @@
 #!/usr/bin/env bash
 # =============================================================================
-# latencia_iot.sh — Escenario 2: Latencia IoT
+# enlace_limitado.sh — Escenario 4: Enlace limitado
 # =============================================================================
-# Propósito: Simula condiciones de red típicas de deployments IoT reales
+# Propósito: Simula un enlace de baja capacidad, típico de gateways IoT con
+#            conectividad celular (2G/EDGE/NB-IoT) o radio LP-WAN.
 #
 # Parámetros tc netem aplicados:
-#   delay 80ms jitter 20ms distribution normal
+#   rate 512kbit delay 50ms
 #
-#   - delay 80ms   → latencia base de 80 milisegundos por paquete
-#   - jitter 20ms  → variación aleatoria ±20ms (distribución normal)
-#   Resultado: cada paquete sufre entre ~60ms y ~100ms de latencia
+#   - rate 512kbit → limita el throughput a 512 Kbps (≈ 64 KB/s)
+#                    equivalente a un enlace 2G/EDGE real
+#   - delay 50ms   → latencia base adicional (sin jitter en este escenario)
 #
 # Uso:
-#   sudo ./latencia_iot.sh
-#   sudo ./latencia_iot.sh --iface-docker br-XXXXXXXX
+#   sudo ./enlace_limitado.sh
+#   sudo ./enlace_limitado.sh --iface-docker br-XXXXXXXX
 #
 # Para revertir: sudo ./baseline.sh
 # =============================================================================
@@ -32,9 +33,11 @@ IFACE_DOCKER="${IFACE_DOCKER:-br-6e0e088d9cfe}"
 IFACE_VPN="${IFACE_VPN:-wg0}"
 
 # ── Parámetros netem de este escenario ───────────────────────────────────────
-DELAY="80ms"
-JITTER="20ms"
-DISTRIBUTION="normal"   # distribución de probabilidad del jitter
+RATE="512kbit"
+DELAY="50ms"
+# Parámetros tbf (usados en el método alternativo)
+TBF_BURST="32kbit"
+TBF_LATENCY="400ms"
 
 # ── Parseo de argumentos ──────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
@@ -52,19 +55,7 @@ if [[ $EUID -ne 0 ]]; then
   exit 1
 fi
 
-# ── Función: aplicar netem sobre una interfaz ─────────────────────────────────
-# tc qdisc add dev <iface> root netem delay X jitter Y distribution Z
-#
-# Explicación del comando:
-#   tc          → traffic control (herramienta de iproute2)
-#   qdisc       → queueing discipline (disciplina de cola)
-#   add         → agregar nueva disciplina (falla si ya existe → usar replace)
-#   dev <iface> → interfaz objetivo
-#   root        → aplica en el punto de salida (egress) de la interfaz
-#   netem       → Network Emulator — módulo del kernel para degradación
-#   delay X     → añade X de latencia a cada paquete en egress
-#   jitter Y    → variación aleatoria sobre el delay base
-#   distribution normal → distribución gaussiana para el jitter (más realista)
+# ── Función: aplicar netem con rate + delay ────────────────────────────────
 apply_netem() {
   local iface="$1"
   local label="$2"
@@ -76,22 +67,37 @@ apply_netem() {
     return 0
   fi
 
-  # Limpiar regla previa si existe (para poder re-ejecutar el script)
+  # Limpiar regla previa
   tc qdisc del dev "$iface" root 2>/dev/null || true
 
-  # Aplicar degradación
-  tc qdisc add dev "$iface" root netem \
-    delay "$DELAY" "$JITTER" distribution "$DISTRIBUTION"
+  # Método principal: netem con rate nativo (kernel >= 3.3, Ubuntu 24.04 OK)
+  if tc qdisc add dev "$iface" root netem \
+       delay "$DELAY" rate "$RATE" 2>/dev/null; then
+    echo -e "  ${GREEN}[OK]${NC} rate=${RATE} delay=${DELAY} (método netem directo)"
 
-  echo -e "  ${GREEN}[OK]${NC} delay=${DELAY} jitter=${JITTER} dist=${DISTRIBUTION}"
+  else
+    # Método alternativo: netem (delay) + tbf (rate limiting en cadena)
+    echo -e "  ${YELLOW}[FALLBACK]${NC} netem rate no disponible — usando netem+tbf encadenado"
+
+    # Paso 1: qdisc raíz con netem para el delay
+    tc qdisc add dev "$iface" root handle 1: netem delay "$DELAY"
+
+    # Paso 2: tbf como hijo del netem para el rate limiting
+    # burst: tamaño del token bucket (afecta ráfagas cortas)
+    # latency: tiempo máximo que un paquete puede esperar en la cola tbf
+    tc qdisc add dev "$iface" parent 1:1 handle 10: tbf \
+      rate "$RATE" burst "$TBF_BURST" latency "$TBF_LATENCY"
+
+    echo -e "  ${GREEN}[OK]${NC} delay=${DELAY} via netem | rate=${RATE} via tbf"
+  fi
 }
 
 # ── Ejecución ─────────────────────────────────────────────────────────────────
 echo ""
-echo -e "${CYAN}════════════════════════════════════════════════${NC}"
-echo -e "${CYAN}  ESCENARIO 2 — Latencia IoT                   ${NC}"
-echo -e "${CYAN}  delay ${DELAY} jitter ${JITTER} (${DISTRIBUTION})     ${NC}"
-echo -e "${CYAN}════════════════════════════════════════════════${NC}"
+echo -e "${CYAN}══════════════════════════════════════════════════${NC}"
+echo -e "${CYAN}  ESCENARIO 4 — Enlace limitado                   ${NC}"
+echo -e "${CYAN}  rate ${RATE}  delay ${DELAY}                       ${NC}"
+echo -e "${CYAN}══════════════════════════════════════════════════${NC}"
 echo ""
 
 apply_netem "$IFACE_DOCKER" "Plano 1: Docker IoT bridge (sensor→edge)"
@@ -99,7 +105,7 @@ echo ""
 apply_netem "$IFACE_VPN"    "Plano 2: WireGuard VPN (edge→coordinator)"
 echo ""
 
-# ── Verificación con tc qdisc show ───────────────────────────────────────────
+# ── Verificación ──────────────────────────────────────────────────────────────
 echo -e "${CYAN}[VERIFICACIÓN]${NC} Reglas activas:"
 echo ""
 for iface in "$IFACE_DOCKER" "$IFACE_VPN"; do
@@ -110,7 +116,7 @@ for iface in "$IFACE_DOCKER" "$IFACE_VPN"; do
 done
 
 echo ""
-echo -e "${GREEN}[ESCENARIO ACTIVO]${NC} Latencia IoT aplicada en ambos planos."
+echo -e "${GREEN}[ESCENARIO ACTIVO]${NC} Enlace limitado a ${RATE} con delay ${DELAY} en ambos planos."
 echo ""
 echo -e "${CYAN}[REVERTIR]${NC} sudo ./baseline.sh"
 echo -e "Timestamp: $(date '+%Y-%m-%d %H:%M:%S')"

@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
 # =============================================================================
-# latencia_iot.sh — Escenario 2: Latencia IoT
+# perdida_paquetes.sh — Escenario 3: Pérdida de paquetes
 # =============================================================================
-# Propósito: Simula condiciones de red típicas de deployments IoT reales
+# Propósito: Simula condiciones de red con pérdida de paquetes, típico de
+#            enlaces WiFi industriales, redes mesh o canales de radio.
 #
 # Parámetros tc netem aplicados:
-#   delay 80ms jitter 20ms distribution normal
+#   loss 8%
 #
-#   - delay 80ms   → latencia base de 80 milisegundos por paquete
-#   - jitter 20ms  → variación aleatoria ±20ms (distribución normal)
-#   Resultado: cada paquete sufre entre ~60ms y ~100ms de latencia
+#   - loss 8% → el kernel descarta aleatoriamente el 8% de los paquetes
+#               en egress de la interfaz (distribución uniforme)
 #
 # Uso:
-#   sudo ./latencia_iot.sh
-#   sudo ./latencia_iot.sh --iface-docker br-XXXXXXXX
+#   sudo ./perdida_paquetes.sh
+#   sudo ./perdida_paquetes.sh --iface-docker br-XXXXXXXX
 #
 # Para revertir: sudo ./baseline.sh
 # =============================================================================
@@ -32,9 +32,7 @@ IFACE_DOCKER="${IFACE_DOCKER:-br-6e0e088d9cfe}"
 IFACE_VPN="${IFACE_VPN:-wg0}"
 
 # ── Parámetros netem de este escenario ───────────────────────────────────────
-DELAY="80ms"
-JITTER="20ms"
-DISTRIBUTION="normal"   # distribución de probabilidad del jitter
+LOSS_PERCENT="8%"
 
 # ── Parseo de argumentos ──────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
@@ -52,19 +50,8 @@ if [[ $EUID -ne 0 ]]; then
   exit 1
 fi
 
-# ── Función: aplicar netem sobre una interfaz ─────────────────────────────────
-# tc qdisc add dev <iface> root netem delay X jitter Y distribution Z
-#
-# Explicación del comando:
-#   tc          → traffic control (herramienta de iproute2)
-#   qdisc       → queueing discipline (disciplina de cola)
-#   add         → agregar nueva disciplina (falla si ya existe → usar replace)
-#   dev <iface> → interfaz objetivo
-#   root        → aplica en el punto de salida (egress) de la interfaz
-#   netem       → Network Emulator — módulo del kernel para degradación
-#   delay X     → añade X de latencia a cada paquete en egress
-#   jitter Y    → variación aleatoria sobre el delay base
-#   distribution normal → distribución gaussiana para el jitter (más realista)
+# ── Función: aplicar netem con pérdida ───────────────────────────────────────
+# tc qdisc add dev <iface> root netem loss X%
 apply_netem() {
   local iface="$1"
   local label="$2"
@@ -76,22 +63,21 @@ apply_netem() {
     return 0
   fi
 
-  # Limpiar regla previa si existe (para poder re-ejecutar el script)
+  # Limpiar regla previa
   tc qdisc del dev "$iface" root 2>/dev/null || true
 
-  # Aplicar degradación
-  tc qdisc add dev "$iface" root netem \
-    delay "$DELAY" "$JITTER" distribution "$DISTRIBUTION"
+  # Aplicar pérdida de paquetes
+  tc qdisc add dev "$iface" root netem loss "$LOSS_PERCENT"
 
-  echo -e "  ${GREEN}[OK]${NC} delay=${DELAY} jitter=${JITTER} dist=${DISTRIBUTION}"
+  echo -e "  ${GREEN}[OK]${NC} loss=${LOSS_PERCENT} aplicado"
 }
 
 # ── Ejecución ─────────────────────────────────────────────────────────────────
 echo ""
-echo -e "${CYAN}════════════════════════════════════════════════${NC}"
-echo -e "${CYAN}  ESCENARIO 2 — Latencia IoT                   ${NC}"
-echo -e "${CYAN}  delay ${DELAY} jitter ${JITTER} (${DISTRIBUTION})     ${NC}"
-echo -e "${CYAN}════════════════════════════════════════════════${NC}"
+echo -e "${CYAN}══════════════════════════════════════════════════${NC}"
+echo -e "${CYAN}  ESCENARIO 3 — Pérdida de paquetes               ${NC}"
+echo -e "${CYAN}  loss ${LOSS_PERCENT}                                       ${NC}"
+echo -e "${CYAN}══════════════════════════════════════════════════${NC}"
 echo ""
 
 apply_netem "$IFACE_DOCKER" "Plano 1: Docker IoT bridge (sensor→edge)"
@@ -99,7 +85,7 @@ echo ""
 apply_netem "$IFACE_VPN"    "Plano 2: WireGuard VPN (edge→coordinator)"
 echo ""
 
-# ── Verificación con tc qdisc show ───────────────────────────────────────────
+# ── Verificación ──────────────────────────────────────────────────────────────
 echo -e "${CYAN}[VERIFICACIÓN]${NC} Reglas activas:"
 echo ""
 for iface in "$IFACE_DOCKER" "$IFACE_VPN"; do
@@ -110,7 +96,7 @@ for iface in "$IFACE_DOCKER" "$IFACE_VPN"; do
 done
 
 echo ""
-echo -e "${GREEN}[ESCENARIO ACTIVO]${NC} Latencia IoT aplicada en ambos planos."
+echo -e "${GREEN}[ESCENARIO ACTIVO]${NC} Pérdida de paquetes del ${LOSS_PERCENT} aplicada en ambos planos."
 echo ""
 echo -e "${CYAN}[REVERTIR]${NC} sudo ./baseline.sh"
 echo -e "Timestamp: $(date '+%Y-%m-%d %H:%M:%S')"
